@@ -36,7 +36,6 @@ SUBROUTINE text_output(ktau, kstart, kend, dels, air, bgc, &
   INTEGER(i_d)                          :: ijd  
   INTEGER(i_d)                 		:: u         ! output unit
   LOGICAL                      		:: is_open   ! Is file open?
-  REAL(r_1), DIMENSION(mp)		:: owbtot
   REAL(r_1), DIMENSION(mp)		:: swnet
   REAL(r_1), DIMENSION(mp)		:: lwnet
   INTEGER :: k ! do loop counter

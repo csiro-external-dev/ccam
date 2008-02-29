@@ -1,3 +1,5 @@
+MODULE air_module
+!
 ! cable_cbm.f90
 !
 ! Source file containing main routine and canopy code for CABLE, 
@@ -10,14 +12,38 @@
 ! bugs to gabsun@gmail.com.
 !
 ! This file contains modules:
-! cbm_module, air_module, roughness_module, radiation_module, 
-! and canopy_module.
+!   cbm_module,
+!   air_module,
+!   roughness_module,
+!   radiation_module, and 
+!   canopy_module
+! The subroutines included are:
+!   define_air,
+!   ruff_resist,
+!   init_radiation,
+!   radiation,
+!   define_canopy, and
+!   cbm
+! The functions included are:
+!   sinbet,
+!   spitter,
+!   qsatf,
+!   ej3x,
+!   ej4x,
+!   xvcmxt4,
+!   xvcmxt3,
+!   xejmxt3,
+!   psim,
+!   psis,
+!   rplant, and
+!   rsoil
 !
 ! Most user-defined types (e.g. met%tk) are defined in define_types module
 ! in cable_variables.f90
 
 !=========================================================================
-MODULE air_module
+
+!MODULE air_module
   USE physical_constants
   USE define_types
   IMPLICIT NONE
@@ -224,7 +250,8 @@ CONTAINS
        rad%extkd = 0.7
     END WHERE
     ! Extinction coefficient for leaf nitrogen profile in canopy:
-    rad%extkn = rad%extkd * SQRT(1.0 - taul(1) - refl(1))
+    ! now read from veg parameter file rather than calculated here
+!   rad%extkn = rad%extkd * SQRT(1.0 - taul(1) - refl(1))
     c1 = SQRT(1. - taul - refl)
     ! Canopy reflection black horiz leaves (eq. 6.19 in Goudriaan and van Laar, 1994):
     rhoch = (1.0 - c1) / (1.0 + c1)
@@ -274,7 +301,9 @@ CONTAINS
     ! Define vegetation mask:
     mask = canopy%vlaiw > 1e-2 .AND. met%fsd > 1.0e-2
     ! Relative leaf nitrogen concentration within canopy:
-    cf2n = EXP(-rad%extkn * canopy%vlaiw)
+    ! rad%extkn renamed veg%extkn
+!   cf2n = EXP(-rad%extkn * canopy%vlaiw)
+    cf2n = EXP(-veg%extkn * canopy%vlaiw)
     ! See Sellers 1985, eq.13 (leaf angle parameters):
     xphi1 = 0.5 - veg%xfang * (0.633 + 0.33 * veg%xfang)
     xphi2 = 0.877 - (0.877 * 2.0) * xphi1
@@ -379,7 +408,8 @@ CONTAINS
             +(1.-fbeam)*(1.-reffdf(:,1))*EXP(-extkdm(:,1)*canopy%vlaiw) + &
             fbeam*(1.-reffbm(:,2))*cexpkbm +(1.-fbeam)*(1.-reffdf(:,2))*cexpkdm)
        ! Scaling from single leaf to canopy, see Wang & Leuning 1998 appendix C:
-       rad%scalex(:,1) = (1.0 - transb * cf2n) / (rad%extkb + rad%extkn)
+!      rad%scalex(:,1) = (1.0 - transb * cf2n) / (rad%extkb + rad%extkn)
+       rad%scalex(:,1) = (1.0 - transb * cf2n) / (rad%extkb + veg%extkn)
        ! Leaf area index of big leaf, sunlit, shaded, respectively:
        rad%fvlai(:,1) = (1.0 - transb) / rad%extkb
        rad%fvlai(:,2) = canopy%vlaiw - rad%fvlai(:,1)
@@ -390,7 +420,8 @@ CONTAINS
        rad%fvlai(:,1) = 0.0
        rad%fvlai(:,2) = canopy%vlaiw
     END WHERE
-    rad%scalex(:,2) = (1.0 - cf2n) / rad%extkn - rad%scalex(:,1)
+!   rad%scalex(:,2) = (1.0 - cf2n) / rad%extkn - rad%scalex(:,1)
+    rad%scalex(:,2) = (1.0 - cf2n) / veg%extkn - rad%scalex(:,1)
     ! Total energy absorbed by canopy:
     rad%rniso = sum(rad%qcan, 3)
   END SUBROUTINE radiation
@@ -596,19 +627,30 @@ CONTAINS
     ! BATS-type canopy saturation proportional to LAI:
     cansat = veg%canst1 * canopy%vlaiw
     ! Leaf phenology influence on vcmax and jmax
-    phenps = max (1.0e-4, MIN(1.,1. - ( (veg%tmaxvj - ssoil%tgg(:,4)+tfrz)/ &
+! rml 22/10/07 only apply to deciduous types
+    WHERE (veg%deciduous)
+      phenps = max (1.0e-4, MIN(1.,1. - ( (veg%tmaxvj - ssoil%tgg(:,4)+tfrz)/ &
          (veg%tmaxvj - veg%tminvj) )**2 ) )
-    WHERE ( ssoil%tgg(:,4) < (veg%tminvj + tfrz) ) phenps = 0.0
-    WHERE ( ssoil%tgg(:,4) > (veg%tmaxvj + tfrz) ) phenps = 1.0
+      WHERE ( ssoil%tgg(:,4) < (veg%tminvj + tfrz) ) phenps = 0.0
+      WHERE ( ssoil%tgg(:,4) > (veg%tmaxvj + tfrz) ) phenps = 1.0
+    ELSEWHERE
+      phenps = 1.0
+    END WHERE
     ! Set previous time step canopy water storage:
     oldcansto=canopy%cansto
     ! Rainfall variable is limited so canopy interception is limited,
     ! used to stabilise latent fluxes.
-    cc =min(met%precip, 4./(1440./(dels/60.)))! to avoid canopy temp. oscillations
+    ! to avoid excessive direct canopy evaporation (EK nov2007, snow scheme)
+    cc =min(met%precip-met%precip_s, 4./(1440./(dels/60.)))
+!    ! to avoid canopy temp. oscillations
+!    cc =min(met%precip, 4./(1440./(dels/60.)))
     ! Calculate canopy intercepted rainfall, equal to zero if temp < 0C:
     canopy%wcint = MERGE(MIN(MAX(cansat - canopy%cansto,0.0), cc), 0.0, &
-         cc > 0.0  .AND. met%tk > tfrz)
+      & cc > 0.0  )  ! EK nov2007, snow scheme
+!         cc > 0.0  .AND. met%tk > tfrz)
     ! Define canopy throughfall (100% of precip if temp < 0C, see above):
+    canopy%through = met%precip_s + MIN( met%precip - met%precip_s , &
+      & MAX(0.0, met%precip - met%precip_s - canopy%wcint) )  ! EK nov2007
     canopy%through = MIN(met%precip,MAX(0.0, met%precip - canopy%wcint))
     ! Add canopy interception to canopy storage term:
     canopy%cansto = canopy%cansto + canopy%wcint
@@ -1327,28 +1369,31 @@ MODULE cbm_module
   PUBLIC cbm 
 CONTAINS
   SUBROUTINE cbm(ktau, kstart, kend, dels, air, bgc, canopy, met, &
-       bal, rad, rough, soil, ssoil, sum_flux, veg)
+       bal, rad, rough, soil, ssoil, sum_flux, veg, nvegt, nsoilt)
+    ! BP added nvegt and nsoilt to the list (dec 2007)
     USE carbon_module
     USE soil_snow_module
     USE define_types
     USE physical_constants
     USE roughness_module
     USE radiation_module
-    INTEGER(i_d), INTENT(IN)		:: ktau ! integration step number
-    INTEGER(i_d), INTENT(IN)	       	:: kstart ! starting value of ktau
-    INTEGER(i_d), INTENT(IN)	       	:: kend ! total # timesteps in run
-    REAL(r_1), INTENT(IN)		:: dels ! time setp size (s)
-    TYPE (air_type), INTENT(INOUT)	:: air
-    TYPE (bgc_pool_type), INTENT(INOUT)	:: bgc	
-    TYPE (canopy_type), INTENT(INOUT)	:: canopy
-    TYPE (met_type), INTENT(INOUT) 	:: met
-    TYPE (balances_type), INTENT(INOUT) 	:: bal
-    TYPE (radiation_type), INTENT(INOUT) 	:: rad
-    TYPE (roughness_type), INTENT(INOUT) 	:: rough
-    TYPE (soil_parameter_type), INTENT(INOUT)	:: soil	
-    TYPE (soil_snow_type), INTENT(INOUT)	:: ssoil
-    TYPE (sum_flux_type), INTENT(INOUT)	:: sum_flux
-    TYPE (veg_parameter_type), INTENT(INOUT)	:: veg	
+    INTEGER(i_d), INTENT(IN)            :: ktau ! integration step number
+    INTEGER(i_d), INTENT(IN)            :: kstart ! starting value of ktau
+    INTEGER(i_d), INTENT(IN)            :: kend ! total # timesteps in run
+    REAL(r_1), INTENT(IN)               :: dels ! time setp size (s)
+    TYPE (air_type), INTENT(INOUT)      :: air
+    TYPE (bgc_pool_type), INTENT(INOUT) :: bgc
+    TYPE (canopy_type), INTENT(INOUT)   :: canopy
+    TYPE (met_type), INTENT(INOUT)      :: met
+    TYPE (balances_type), INTENT(INOUT) :: bal
+    TYPE (radiation_type), INTENT(INOUT)      :: rad
+    TYPE (roughness_type), INTENT(INOUT)      :: rough
+    TYPE (soil_parameter_type), INTENT(INOUT) :: soil
+    TYPE (soil_snow_type), INTENT(INOUT)      :: ssoil
+    TYPE (sum_flux_type), INTENT(INOUT)       :: sum_flux
+    TYPE (veg_parameter_type), INTENT(INOUT)  :: veg
+    INTEGER(i_d), INTENT(IN)            :: nvegt  ! Number of vegetation types
+    INTEGER(i_d), INTENT(IN)            :: nsoilt ! Number of soil types
 
      veg%meth = 1
 
@@ -1357,7 +1402,8 @@ CONTAINS
     ! Calculate canopy variables:
     CALL define_canopy(ktau,bal,rad,rough,air,met,dels,ssoil,soil,veg,bgc,canopy)
     ! Calculate soil and snow variables:
-    CALL soil_snow(dels, ktau, soil, ssoil, veg, canopy, met)
+    CALL soil_snow(dels, ktau, soil, ssoil, veg, canopy, met, bal) ! EK nov2007
+!    CALL soil_snow(dels, ktau, soil, ssoil, veg, canopy, met)
 
     !	need to adjust fe after soilsnow
     canopy%fev	= REAL(canopy%fevc,r_1) + canopy%fevw
@@ -1380,15 +1426,14 @@ CONTAINS
     sum_flux%dsumrd = sum_flux%dsumrd+canopy%frday*dels
     rad%flws = sboltz*emsoil* ssoil%tss **4
     
-    CALL soilcarb(soil, ssoil, veg, bgc, met, canopy)
-    CALL carbon_pl(dels, soil, ssoil, veg, canopy, bgc)
+    CALL soilcarb(soil, ssoil, veg, bgc, met, canopy, nsoilt)
+    CALL carbon_pl(dels, soil, ssoil, veg, canopy, bgc, nvegt)
     ! canopy%frs set in soilcarb
     sum_flux%sumrs = sum_flux%sumrs+canopy%frs*dels
     ! Set net ecosystem exchange after adjustments to frs:
     canopy%fnee = canopy%fpn + canopy%frs + canopy%frp
   
-END SUBROUTINE cbm
+  END SUBROUTINE cbm
 
 END MODULE cbm_module
 
-!===================================================================================

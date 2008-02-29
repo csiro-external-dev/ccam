@@ -9,6 +9,10 @@
 !!$ restart files, an option for state spinup and variable bounds
 !!$ checking.
 
+!!$ This is the text driver for version 1.3 where namelist is used
+!!$ to input site name and info so that there is no need to recompile
+!!$ for a different site.
+
 PROGRAM offline_driver
   USE cbm_module
   USE canopy_module
@@ -32,12 +36,34 @@ PROGRAM offline_driver
   INTEGER(i_d)  :: logn     ! log file unit number
   INTEGER(i_d) 	:: kstart   ! start of simulation #
   INTEGER(i_d)  :: ktau	    ! index of time step = 1 ..  kend
-  CHARACTER(LEN=99) :: filename_met ! name of file for met. parameters
+  CHARACTER(LEN=99) :: filename_met ! name of file for CABLE input
   CHARACTER(LEN=99) :: filename_out ! name of file for CABLE output
   CHARACTER(LEN=99) :: filename_log ! name of file for execution log
+  CHARACTER(LEN=99) :: filename_LAI         ! name of file for default LAI
+  CHARACTER(LEN=99) :: filename_type        ! file for default veg/soil type
+  CHARACTER(LEN=99) :: filename_veg         ! file for vegetation parameters
+  CHARACTER(LEN=99) :: filename_soil        ! name of file for soil parameters
   INTEGER(i_d) :: u=30, k_in, ios,j
+  LOGICAL    :: vegparmnew   ! using new format input file (BP dec 2007)
+  INTEGER(i_d) :: nvegt  ! Number of vegetation types (BP dec 2007)
+  INTEGER(i_d) :: nsoilt ! Number of soil types
   LOGICAL :: is_open
-  REAL(r_1) :: xdum1, xdum2
+  REAL(r_1) :: xdum1, xdum2, lat2, lon2
+  NAMELIST/CABLEtxt/filename_met,&
+                    filename_out,&
+                    filename_log,&
+                    filename_type,&
+                    filename_veg,&
+                    filename_soil,&
+                    vegparmnew,&
+                    logn,&
+                    dels,kend,lat2,lon2
+  !===================================================================!
+  ! Open, read and close the namelist file.
+  OPEN(10,FILE='cabletxt.nml')
+  READ(10,NML=CABLEtxt)
+  CLOSE(10)
+  !=====================================================================!
 
   ! Specify input variable units in input file:
   units%Rainf='h' ! 's' (mm/s or kg/m2/s) or 'h' (mm/h) or 't' (mm/timestep)
@@ -52,18 +78,20 @@ PROGRAM offline_driver
 
   ! Allocate latitude, longitude 
   ALLOCATE(latitude(mp),longitude(mp))
-  
-  filename_log    = 'log_cable.txt'
-  filename_out    = 'out_cable.txt'
-  logn = 88 ! log file unit number
+  latitude(mp) = lat2
+  longitude(mp)= lon2
+
+!  filename_log    = 'log_cable.txt'
+!  filename_out    = 'out_cable.txt'
+!  logn = 88 ! log file unit number
  
-  !=============== SINGLE SITE EXAMPLES ===============
-  ! Tumbarumba (Australian eucalypt site):
-  filename_met    = 'sample_met/Tumbarumba.txt'
-  dels = 3600.0       ! set time step size in seconds
-  kend = 17520         ! set number of time steps
-  latitude = -35.6557 ! set latitude
-  longitude = 148.152 ! set longitude
+!  !=============== SINGLE SITE EXAMPLES ===============
+!  ! Tumbarumba (Australian eucalypt site):
+!  filename_met    = 'sample_met/Tumbarumba.txt'
+!  dels = 3600.0       ! set time step size in seconds
+!  kend = 17520         ! set number of time steps
+!  latitude = -35.6557 ! set latitude
+!  longitude = 148.152 ! set longitude
 !!$  ! Tharandt (German coniferous site):
 !!$  filename_met    = 'sample_met/Tharandt_met.txt'
 !!$  dels = 1800.0       ! set time step size in seconds
@@ -76,7 +104,7 @@ PROGRAM offline_driver
 !!$  kend = 52560        ! set number of time steps 
 !!$  latitude = 40.006   ! set latitude
 !!$  longitude = -88.292 ! set longitude
-  !========================================================
+!  !========================================================
 
   ! Open log file:
   OPEN(logn,FILE=filename_log)
@@ -89,8 +117,9 @@ PROGRAM offline_driver
 
   ! Get default (very coarse grid) land surface parameters 
   ! and initialisations, and allocate main variables:
-  CALL default_params(met,air,ssoil,veg,bgc,soil,canopy, &
-       rough,rad,sum_flux,bal,logn)
+  CALL default_params(filename_veg,filename_soil,filename_type,&
+                      met,air,ssoil,veg,bgc,soil,canopy, &
+                      rough,rad,sum_flux,bal,logn,vegparmnew,nvegt,nsoilt)
   !=====================================================================!
   ! user-forced initialisations/parameter values that will override 
   ! soil/veg type specifications or default values (see user guide):
@@ -120,7 +149,7 @@ PROGRAM offline_driver
 
      ! CALL land surface scheme for this timestep
      CALL cbm(ktau,kstart,kend,dels,air,bgc,canopy,met, &
-          bal,rad,rough,soil,ssoil,sum_flux,veg)
+          bal,rad,rough,soil,ssoil,sum_flux,veg, nvegt, nsoilt)
 
      CALL text_output(ktau,kstart,kend,dels,air,bgc, &
           canopy,met,bal,rad,rough,soil,ssoil,sum_flux,veg, &

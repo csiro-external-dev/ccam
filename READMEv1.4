@@ -1,0 +1,145 @@
+Compared to v1.0 on CABLE website, version 1.2 only has a new Makefile which
+preset all compiling options for various CMAR platforms.
+
+********************************************************************************
+Version 1.3
+
+Compared to v1.2 on CABLE website, version 1.3 uses Peter Isaac's driver
+which requires changes in cable_driver, cable_input and cable_parameters.
+A namelist file (cable_nml) is added to the directory.
+Files in the surface_data directory have their name changed to more 
+meaningful ones, plus adding a soil_parameter file (data pulled out from code).
+Moreover, Gab Abramowitz found a bug in cable_output and corrected the units
+of NEE written to the netcdf file.
+Furthermore, Gab introduced new R scripts in the testing directory.
+Finally, Gab introduced the safe spin-up scheme using average precipitation.
+
+cable_driver
+
+1) removed initialisation of file names and program switches from beginning
+   of program code and put into a namelist file
+2) added declaration of namelist to program code
+3) tidied up namelist file
+4) added the following file names
+    filename_LAI  - default LAI file, used if LAI not found in
+                    the input file
+    filename_type - global map of vegetation and soil types
+    filename_veg  - vegetation parameters
+    filename_soil - soil parameters
+5) added the code to read the namelist file
+6) added filename_veg, filename_soil and filename_type to call to load_params
+7) added filename_LAI to get_met_data
+8) passed the switch 'spinup' into subroutine calls of open_met_file and
+   get_met_data; also passed 'spinConv' into get_met_data
+
+cable_input
+
+1) added filename_LAI to subroutine get_default_LAI and added filename_LAI
+   to the two calls to get_default_LAI
+2) added filename_veg, filename_soil and filename_type to subroutine
+   load_parameters
+3) added filename_veg and filename_soil to calls to default_params
+4) added large section to find average precipitation for spinup
+
+cable_parameters : default_params
+
+1) moved the initialisation of froot from soil section to veg section
+2) added filename_veg and filename_soil to subroutine default_params
+3) put parameters for 9 soil types into a file with same basic format
+   as vegetation parameters and put in code to read soil properties
+   from file
+
+cable_output
+
+1) Corrected the units for NEE being written to output netcdf files.
+2) Added the deallocation of the variable PrecipScale, which is used in the
+   safe spin-up scheme.
+3) When (a) Parameter and state values are loaded from a restart file (rather
+   than from default) and (b) LAI is loaded from met file (rather than from 
+   default), the pointer "gdpt" will not be associated with any target (used
+   in the default loading by lat/lon routines) when it is deallocated.
+   Fix: check that it is associated before deallocation.
+
+********************************************************************************
+
+Version 1.4
+
+Put in Eva's modular snow scheme, which should behave the same as before.
+Main changes are:
+1) Variable met%precips renamed as met%precip_s for files
+   cable_cbm.f90
+   cable_checks.f90
+   cable_input.f90
+   cable_output.f90
+   cable_soilsnow.f90
+   cable_variables.f90
+2) Major rewritting of cable_soilsnow.f90 to make it modular. It is also cleaned
+   up to fit our new coding standard.
+
+Following are Yingping's changes:
+Within cable_cbm.f90, restricting the simple phenology parameterization to 
+deciduous forests only. This improved NEE results for many non-deciduous sites.
+It requires the introduction of a logical variable veg%deciduous and changes in
+   cable_variables.f90
+   cable_parameters.f90
+
+The froot parameter values were removed from cable_parameters.f90 and
+replaced by an equation to calculate its values based on the new read-in
+parameter rootbeta. Together with new variables veg%vegcf (originally vegcf)
+and veg%extkn (originally rad%extkn), they required corresponding changes in
+   cable_checks.f90
+   cable_input.f90
+   cable_parameters.f90
+   cable_variables.f90
+
+Modified values in leaf reflectance and transmittance within cable_cbm.f90
+
+Modified values in rhos in the input file def_soil_params.txt so that it
+follows the relationship   rho = (1  - ssat) * 2650
+
+Changed the range for a few variables in the check module:
+   SWneti, NPP, GPP, xfang     (YP oct07)
+   SnowDepth                   (EK nov07)
+Introduced the range for new variables into the check module:
+   extkn, wai, vegcf, rootbeta (YP oct07)
+   c3                          (EK nov07)
+
+This version starts to use IGBP vegetation types (instead of CASA types) and
+the input format of the default veg_parm file was altered (in line with changes
+for the online code). It is now called def_veg_params_igbp.txt. Other changes:
+1) Added an alternative to read in new file format for IGBP veg parameters.
+   cable_parameters.f90
+2) Changed declaration of variables hardwired to 13 veg types (also found those
+   hardwired to 9 soil types) to allocatable arrays, which are deallocated
+   after use. Make allowance for IGBP without/with water bodies (16 and 17 types
+   respectively).
+   cable_carbon.f90
+   cable_parameters.f90
+3) Introduced nvegt and nsoil (number of vegetation and soil types respectively)
+   into parameter list of some subroutines. The initial values are obtained
+   from reading the default veg and soil parameter files in default_params,
+   passed up load_parameters to the driver and down to cbm and finally passed
+   to carbon_pl and soilcarb respectively.
+   cable_carbon.f90
+   cable_cbm.f90
+   cable_driver.f90, cable_drivertxt.f90
+   cable_input.f90
+   cable_parameters.f90
+4) N.B. If the met file you read in has the variable iveg, make sure it is in
+   IGBP type as it will overwrite the default. The met files supplied in the
+   package (under directory sample_met) in version 1.4 are named *_igbp.nc
+   and therefore need corresponding change in the namelist (in R script for
+   codes using netCDF files, but in file cabletxt.nml for codes using text
+   files). Bondville does not need changes as cropland is type 12 in both
+   CASA and IGBP, but the files are still renamed.
+5) The input file containing veg and soil types for all global grids is now
+   named VegSoil_Type_Global_igbp.csv and require a different READ statement
+   in cable_parameters.f90 and also need corresponding change in the namelist.
+   In addition, it now has C4 fraction values for each grid (preprocessed 
+   using latitude and vegetation type criteria, and based on a 1x1 C4 fraction
+   map from Still et al. (GBC, 2003). This file is the same as vegtype_igbp.dat
+   in the online version which does not read the last few columns.
+
+Finally, 2 bugs are fixed in the CABLEplots.R script (a) DJF NEE was adding MAM 
+(instead of Dec) to JF, (b) sqerr should be an array.
+

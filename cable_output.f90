@@ -1,12 +1,16 @@
-!!$ cable_output.f90
-!!$
-!!$ Output module for CABLE land surface scheme offline netcdf driver; 
-!!$
-!!$ Gab Abramowitz 2007 University of New South Wales/
-!!$ CSIRO Marine and Atmospheric Research; gabsun@gmail.com
-!!$
-!!$ Subroutines in this file open the output netcdf file for offline CABLE
-!!$ and write to it, providing details about variable units and names. 
+! cable_output.f90
+!
+! Output module for CABLE land surface scheme offline netcdf driver; 
+!
+! Gab Abramowitz 2007 University of New South Wales/
+! CSIRO Marine and Atmospheric Research; gabsun@gmail.com
+!
+! Subroutines in this file:
+!   open_output_file -  open the output netcdf file for offline CABLE
+!   write_output - write to the opened file
+!   close_output_file
+!   create_restart
+!   range_abort
 
 MODULE output_module
   USE input_module
@@ -105,6 +109,10 @@ MODULE output_module
      REAL(r_1),POINTER,DIMENSION(:,:) :: shelrb    ! sheltering factor [-] {avoid - insensitive?}
      REAL(r_1),POINTER,DIMENSION(:,:) :: vcmax     ! maximum RuBP carboxylation rate top leaf [mol/m2/s](5e-6 - 1.5e-4){use}
      REAL(r_1),POINTER,DIMENSION(:,:) :: xfang     ! leaf angle PARAMETER (dimensionless) (v leaf -1.0 horiz 1.0 sphere 0 (-1 - 1))
+     REAL(r_1),POINTER,DIMENSION(:,:) :: wai
+     REAL(r_1),POINTER,DIMENSION(:,:) :: vegcf
+     REAL(r_1),POINTER,DIMENSION(:,:) :: extkn
+!     REAL(r_1),POINTER,DIMENSION(:,:) :: rootbeta
      REAL(r_1),POINTER,DIMENSION(:,:,:) :: ratecp  ! plant carbon pool rate constant (1/year)
      REAL(r_1),POINTER,DIMENSION(:,:,:) :: ratecs  ! soil carbon pool rate constant (1/year)
      REAL(r_1),POINTER,DIMENSION(:,:) :: albsoil   ! soil reflectance [-]
@@ -113,6 +121,8 @@ MODULE output_module
      REAL(r_1),POINTER,DIMENSION(:,:) :: tminvj    ! min temperature of the start of photosynthesis(leaf phenology)[-] (-10 - 10)
      REAL(r_1),POINTER,DIMENSION(:,:) :: tmaxvj    ! max temperature of the start of photosynthesis(leaf phenology)[-] (-5 - 15)
      REAL(r_1),POINTER,DIMENSION(:,:) :: vbeta     ! stomatal sensitivity to soil water
+!     REAL(r_1),POINTER,DIMENSION(:,:) :: nvegt     ! number of veg types
+!     REAL(r_1),POINTER,DIMENSION(:,:) :: nsoilt    ! number of soil types
      REAL(r_1),POINTER,DIMENSION(:,:) :: iveg      ! vegetation type from global index
      REAL(r_1),POINTER,DIMENSION(:,:) :: isoil     ! soil type from global index
      REAL(r_1),POINTER,DIMENSION(:,:) :: meth      ! canopy turbulence parameterisation selection
@@ -213,6 +223,10 @@ MODULE output_module
      LOGICAL :: shelrb  = .FALSE.   ! sheltering factor [-] {avoid - insensitive?}
      LOGICAL :: vcmax  = .FALSE.    ! maximum RuBP carboxylation rate top leaf [mol/m2/s](5e-6 - 1.5e-4){use}
      LOGICAL :: xfang  = .FALSE.    ! leaf angle PARAMETER (dimensionless) (v leaf -1.0 horiz 1.0 sphere 0 (-1 - 1))
+     LOGICAL :: wai    = .FALSE.    ! wood area index
+     LOGICAL :: vegcf  = .FALSE.    ! 
+     LOGICAL :: extkn  = .FALSE.    ! 
+!     LOGICAL :: rootbeta = .FALSE.  !
      LOGICAL :: ratecp = .FALSE.  ! plant carbon pool rate constant (1/year)
      LOGICAL :: ratecs = .FALSE.  ! soil carbon pool rate constant (1/year)
      LOGICAL :: albsoil = .FALSE.  ! soil reflectance [-]
@@ -221,6 +235,8 @@ MODULE output_module
      LOGICAL :: tminvj = .FALSE.    ! min temperature of the start of photosynthesis(leaf phenology)[-] (-10 - 10)
      LOGICAL :: tmaxvj  = .FALSE.   ! max temperature of the start of photosynthesis(leaf phenology)[-] (-5 - 15)
      LOGICAL :: vbeta = .FALSE.     ! stomatal sensitivity to soil water
+!     LOGICAL :: nvegt = .FALSE.     ! number of veg types
+!     LOGICAL :: nsoilt = .FALSE.    ! number of soil types
      LOGICAL :: iveg  = .FALSE.     ! vegetation type from global index
      LOGICAL :: isoil  = .FALSE.    ! soil type from global index
      LOGICAL :: meth  = .FALSE.     ! method for solving ??? in canopy scheme
@@ -967,7 +983,8 @@ CONTAINS
           ALLOCATE(out%NEE(mp,1,1))
        END IF
        ! Define NEE units:
-       status = NF90_PUT_ATT(ncid_out,ovid%NEE,'units','W/m^2')
+       ! Gab corrected the units for NEE (Oct 2007)
+       status = NF90_PUT_ATT(ncid_out,ovid%NEE,'units','umol/m^2/s')
        IF (status /= NF90_NOERR) CALL nc_abort &
             ('Error defining NEE variable attributes in output file. '// &
             '(SUBROUTINE open_output_file)')
@@ -1577,6 +1594,70 @@ CONTAINS
             ('Error defining NPP variable attributes in output file. '// &
             '(SUBROUTINE open_output_file)')
     END IF
+!    ! nvegt:
+!    IF(output%params.OR.output%nvegt) THEN
+!!       IF(gridType=='mask') THEN
+!!          WRITE(logn,*) 'Writing nvegt to output file using mask grid'
+!!          status=NF90_DEF_VAR(ncid_out,'nvegt',NF90_FLOAT,(/xID,yID/), &
+!!               opid%nvegt) ! Define nvegt
+!!          IF (status /= NF90_NOERR) CALL nc_abort &
+!!               ('Error defining nvegt variable in output file. '// &
+!!               '(SUBROUTINE open_output_file)')
+!!          ALLOCATE(out%nvegt(xdimsize,ydimsize))
+!!       ELSE IF(gridType=='land') THEN
+!!          WRITE(logn,*) 'Writing nvegt to output file using land grid'
+!!          status=NF90_DEF_VAR(ncid_out,'nvegt',NF90_FLOAT,(/landID/), &
+!!               opid%nvegt)
+!          WRITE(logn,*) 'Writing nvegt to output file'
+!          status=NF90_DEF_VAR(ncid_out,'nvegt',NF90_FLOAT,opid%nvegt)
+!          IF (status /= NF90_NOERR) CALL nc_abort &
+!               ('Error defining nvegt variable in output file. '// &
+!               '(SUBROUTINE open_output_file)')
+!          ALLOCATE(out%nvegt(1,1))
+!!       END IF
+!       ! Define nvegt units:
+!       status = NF90_PUT_ATT(ncid_out,opid%nvegt,'units','-')
+!       IF (status /= NF90_NOERR) CALL nc_abort &
+!            ('Error defining nvegt variable attributes in output file. '// &
+!            '(SUBROUTINE open_output_file)')
+!       status = NF90_PUT_ATT(ncid_out,opid%nvegt,'long_name', &
+!            'number of vegetation types')
+!       IF (status /= NF90_NOERR) CALL nc_abort &
+!            ('Error defining nvegt variable attributes in output file. '// &
+!            '(SUBROUTINE open_output_file)')
+!    END IF
+!    ! nsoilt:
+!    IF(output%params.OR.output%nsoilt) THEN
+!!       IF(gridType=='mask') THEN
+!!          WRITE(logn,*) 'Writing nsoilt to output file using mask grid'
+!!          status=NF90_DEF_VAR(ncid_out,'nsoilt',NF90_FLOAT,(/xID,yID/), &
+!!               opid%nsoilt) ! Define nsoilt
+!!          IF (status /= NF90_NOERR) CALL nc_abort &
+!!               ('Error defining nsoilt variable in output file. '// &
+!!               '(SUBROUTINE open_output_file)')
+!!          ALLOCATE(out%nsoilt(xdimsize,ydimsize))
+!!       ELSE IF(gridType=='land') THEN
+!!          WRITE(logn,*) 'Writing nsoilt to output file using land grid'
+!!          status=NF90_DEF_VAR(ncid_out,'nsoilt',NF90_FLOAT,(/landID/), &
+!!               opid%nsoilt)
+!          WRITE(logn,*) 'Writing nsoilt to output file'
+!          status=NF90_DEF_VAR(ncid_out,'nsoilt',NF90_FLOAT,opid%nsoilt)
+!          IF (status /= NF90_NOERR) CALL nc_abort &
+!               ('Error defining nsoilt variable in output file. '// &
+!               '(SUBROUTINE open_output_file)')
+!          ALLOCATE(out%nsoilt(1,1))
+!!       END IF
+!       ! Define nsoilt units:
+!       status = NF90_PUT_ATT(ncid_out,opid%nsoilt,'units','-')
+!       IF (status /= NF90_NOERR) CALL nc_abort &
+!            ('Error defining nsoilt variable attributes in output file. '// &
+!            '(SUBROUTINE open_output_file)')
+!       status = NF90_PUT_ATT(ncid_out,opid%nsoilt,'long_name', &
+!            'number of vegetation types')
+!       IF (status /= NF90_NOERR) CALL nc_abort &
+!            ('Error defining nsoilt variable attributes in output file. '// &
+!            '(SUBROUTINE open_output_file)')
+!    END IF
     ! iveg:
     IF(output%params.OR.output%iveg) THEN
        IF(gridType=='mask') THEN
@@ -2387,6 +2468,126 @@ CONTAINS
             ('Error defining xfang variable attributes in output file. '// &
             '(SUBROUTINE open_output_file)')
     END IF
+    ! wai:
+    IF(output%params.OR.output%wai) THEN
+       IF(gridType=='mask') THEN
+          WRITE(logn,*) 'Writing wai to output file using mask grid'
+          status=NF90_DEF_VAR(ncid_out,'wai',NF90_FLOAT,(/xID,yID/), &
+               opid%wai) ! Define wai
+          IF (status /= NF90_NOERR) CALL nc_abort &
+               ('Error defining wai variable in output file. '// &
+               '(SUBROUTINE open_output_file)')
+          ALLOCATE(out%wai(xdimsize,ydimsize))
+       ELSE IF(gridType=='land') THEN
+          WRITE(logn,*) 'Writing wai to output file using land grid'
+          status=NF90_DEF_VAR(ncid_out,'wai',NF90_FLOAT,(/landID/), &
+               opid%wai)
+          IF (status /= NF90_NOERR) CALL nc_abort &
+               ('Error defining wai variable in output file. '// &
+               '(SUBROUTINE open_output_file)')
+          ALLOCATE(out%wai(mp,1))
+       END IF
+       ! Define wai units:
+       status = NF90_PUT_ATT(ncid_out,opid%wai,'units','-')
+       IF (status /= NF90_NOERR) CALL nc_abort &
+            ('Error defining wai variable attributes in output file. '// &
+            '(SUBROUTINE open_output_file)')
+       status = NF90_PUT_ATT(ncid_out,opid%wai,'long_name', &
+            'Wood area index')
+       IF (status /= NF90_NOERR) CALL nc_abort &
+            ('Error defining wai variable attributes in output file. '// &
+            '(SUBROUTINE open_output_file)')
+    END IF
+    ! vegcf:
+    IF(output%params.OR.output%vegcf) THEN
+       IF(gridType=='mask') THEN
+          WRITE(logn,*) 'Writing vegcf to output file using mask grid'
+          status=NF90_DEF_VAR(ncid_out,'vegcf',NF90_FLOAT,(/xID,yID/), &
+               opid%vegcf) ! Define vegcf
+          IF (status /= NF90_NOERR) CALL nc_abort &
+               ('Error defining vegcf variable in output file. '// &
+               '(SUBROUTINE open_output_file)')
+          ALLOCATE(out%vegcf(xdimsize,ydimsize))
+       ELSE IF(gridType=='land') THEN
+          WRITE(logn,*) 'Writing vegcf to output file using land grid'
+          status=NF90_DEF_VAR(ncid_out,'vegcf',NF90_FLOAT,(/landID/), &
+               opid%vegcf)
+          IF (status /= NF90_NOERR) CALL nc_abort &
+               ('Error defining vegcf variable in output file. '// &
+               '(SUBROUTINE open_output_file)')
+          ALLOCATE(out%vegcf(mp,1))
+       END IF
+       ! Define vegcf units:
+       status = NF90_PUT_ATT(ncid_out,opid%vegcf,'units','-')
+       IF (status /= NF90_NOERR) CALL nc_abort &
+            ('Error defining vegcf variable attributes in output file. '// &
+            '(SUBROUTINE open_output_file)')
+       status = NF90_PUT_ATT(ncid_out,opid%vegcf,'long_name', &
+            'vegcf')
+       IF (status /= NF90_NOERR) CALL nc_abort &
+            ('Error defining vegcf variable attributes in output file. '// &
+            '(SUBROUTINE open_output_file)')
+    END IF
+    ! extkn:
+    IF(output%params.OR.output%extkn) THEN
+       IF(gridType=='mask') THEN
+          WRITE(logn,*) 'Writing extkn to output file using mask grid'
+          status=NF90_DEF_VAR(ncid_out,'extkn',NF90_FLOAT,(/xID,yID/), &
+               opid%extkn) ! Define extkn
+          IF (status /= NF90_NOERR) CALL nc_abort &
+               ('Error defining extkn variable in output file. '// &
+               '(SUBROUTINE open_output_file)')
+          ALLOCATE(out%extkn(xdimsize,ydimsize))
+       ELSE IF(gridType=='land') THEN
+          WRITE(logn,*) 'Writing extkn to output file using land grid'
+          status=NF90_DEF_VAR(ncid_out,'extkn',NF90_FLOAT,(/landID/), &
+               opid%extkn)
+          IF (status /= NF90_NOERR) CALL nc_abort &
+               ('Error defining extkn variable in output file. '// &
+               '(SUBROUTINE open_output_file)')
+          ALLOCATE(out%extkn(mp,1))
+       END IF
+       ! Define extkn units:
+       status = NF90_PUT_ATT(ncid_out,opid%extkn,'units','-')
+       IF (status /= NF90_NOERR) CALL nc_abort &
+            ('Error defining extkn variable attributes in output file. '// &
+            '(SUBROUTINE open_output_file)')
+       status = NF90_PUT_ATT(ncid_out,opid%extkn,'long_name', &
+            'extinction coef for vertical profile')
+       IF (status /= NF90_NOERR) CALL nc_abort &
+            ('Error defining extkn variable attributes in output file. '// &
+            '(SUBROUTINE open_output_file)')
+    END IF
+!    ! rootbeta:
+!    IF(output%params.OR.output%rootbeta) THEN
+!       IF(gridType=='mask') THEN
+!          WRITE(logn,*) 'Writing rootbeta to output file using mask grid'
+!          status=NF90_DEF_VAR(ncid_out,'rootbeta',NF90_FLOAT,(/xID,yID/), &
+!               opid%rootbeta) ! Define rootbeta
+!          IF (status /= NF90_NOERR) CALL nc_abort &
+!               ('Error defining rootbeta variable in output file. '// &
+!               '(SUBROUTINE open_output_file)')
+!          ALLOCATE(out%rootbeta(xdimsize,ydimsize))
+!       ELSE IF(gridType=='land') THEN
+!          WRITE(logn,*) 'Writing rootbeta to output file using land grid'
+!          status=NF90_DEF_VAR(ncid_out,'rootbeta',NF90_FLOAT,(/landID/), &
+!               opid%rootbeta)
+!          IF (status /= NF90_NOERR) CALL nc_abort &
+!               ('Error defining rootbeta variable in output file. '// &
+!               '(SUBROUTINE open_output_file)')
+!          ALLOCATE(out%rootbeta(mp,1))
+!       END IF
+!       ! Define rootbeta units:
+!       status = NF90_PUT_ATT(ncid_out,opid%rootbeta,'units','-')
+!       IF (status /= NF90_NOERR) CALL nc_abort &
+!            ('Error defining rootbeta variable attributes in output file. '// &
+!            '(SUBROUTINE open_output_file)')
+!       status = NF90_PUT_ATT(ncid_out,opid%rootbeta,'long_name', &
+!            'rootbeta')
+!       IF (status /= NF90_NOERR) CALL nc_abort &
+!            ('Error defining rootbeta variable attributes in output file. '// &
+!            '(SUBROUTINE open_output_file)')
+!    END IF
     ! tminvj:
     IF(output%params.OR.output%tminvj) THEN
        IF(gridType=='mask') THEN
@@ -2642,6 +2843,16 @@ CONTAINS
          //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
     ! Write model parameters if requested:
     IF(output%params) THEN
+!       out%nvegt(1,1) = nvegt
+!       out%nsoilt(1,1) = nsoilt
+!       status=NF90_PUT_VAR(ncid_out,opid%nvegt,out%nvegt,start=1,count=1)
+!       IF(status/=NF90_NOERR) CALL nc_abort( &
+!               'Error writing nvegt parameter to file ' &
+!               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+!       status=NF90_PUT_VAR(ncid_out,opid%nsoilt,out%nsoilt,start=1,count=1)
+!       IF(status/=NF90_NOERR) CALL nc_abort( &
+!               'Error writing nsoilt parameter to file ' &
+!               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
        IF(gridType=='mask') THEN 
           ! Define global grid parameter variables
           DO i = 1, mp
@@ -2672,6 +2883,10 @@ CONTAINS
              out%rpcoef(land_x(i),land_y(i)) = veg%rpcoef(i)
              out%shelrb(land_x(i),land_y(i)) = veg%shelrb(i)
              out%xfang(land_x(i),land_y(i)) = veg%xfang(i)
+             out%wai(land_x(i),land_y(i)) = veg%wai(i)
+             out%vegcf(land_x(i),land_y(i)) = veg%vegcf(i)
+             out%extkn(land_x(i),land_y(i)) = veg%extkn(i)
+!             out%rootbeta(land_x(i),land_y(i)) = veg%rootbeta(i)
              out%tminvj(land_x(i),land_y(i)) = veg%tminvj(i)
              out%tmaxvj(land_x(i),land_y(i)) = veg%tmaxvj(i)
              out%vbeta(land_x(i),land_y(i)) = veg%vbeta(i)
@@ -2789,6 +3004,22 @@ CONTAINS
                count=(/xdimsize,ydimsize/))
           IF(status/=NF90_NOERR) CALL nc_abort('Error writing xfang parameter to file ' &
                //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+          status=NF90_PUT_VAR(ncid_out,opid%wai,out%wai,start=(/1,1/), &
+               count=(/xdimsize,ydimsize/))
+          IF(status/=NF90_NOERR) CALL nc_abort('Error writing wai parameter to file ' &
+               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+          status=NF90_PUT_VAR(ncid_out,opid%vegcf,out%vegcf,start=(/1,1/), &
+               count=(/xdimsize,ydimsize/))
+          IF(status/=NF90_NOERR) CALL nc_abort('Error writing vegcf parameter to file ' &
+               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+          status=NF90_PUT_VAR(ncid_out,opid%extkn,out%extkn,start=(/1,1/), &
+               count=(/xdimsize,ydimsize/))
+          IF(status/=NF90_NOERR) CALL nc_abort('Error writing extkn parameter to file ' &
+               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+!          status=NF90_PUT_VAR(ncid_out,opid%rootbeta,out%rootbeta,start=(/1,1/), &
+!               count=(/xdimsize,ydimsize/))
+!          IF(status/=NF90_NOERR) CALL nc_abort('Error writing rootbeta parameter to file ' &
+!               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
           status=NF90_PUT_VAR(ncid_out,opid%tminvj,out%tminvj,start=(/1,1/), &
                count=(/xdimsize,ydimsize/))
           IF(status/=NF90_NOERR) CALL nc_abort('Error writing tminvj parameter to file ' &
@@ -2847,6 +3078,10 @@ CONTAINS
              out%rpcoef(i,1) = veg%rpcoef(i)
              out%shelrb(i,1) = veg%shelrb(i)
              out%xfang(i,1) = veg%xfang(i)
+             out%wai(i,1) = veg%wai(i)
+             out%vegcf(i,1) = veg%vegcf(i)
+             out%extkn(i,1) = veg%extkn(i)
+!             out%rootbeta(i,1) = veg%rootbeta(i)
              out%tminvj(i,1) = veg%tminvj(i)
              out%tmaxvj(i,1) = veg%tmaxvj(i)
              out%vbeta(i,1) = veg%vbeta(i)
@@ -2940,6 +3175,18 @@ CONTAINS
           status=NF90_PUT_VAR(ncid_out,opid%xfang,out%xfang(:,1),start=(/1/),count=(/mp/))
           IF(status/=NF90_NOERR) CALL nc_abort('Error writing xfang parameter to file ' &
                //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+          status=NF90_PUT_VAR(ncid_out,opid%wai,out%wai(:,1),start=(/1/),count=(/mp/))
+          IF(status/=NF90_NOERR) CALL nc_abort('Error writing wai parameter to file ' &
+               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+          status=NF90_PUT_VAR(ncid_out,opid%vegcf,out%vegcf(:,1),start=(/1/),count=(/mp/))
+          IF(status/=NF90_NOERR) CALL nc_abort('Error writing vegcf parameter to file ' &
+               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+          status=NF90_PUT_VAR(ncid_out,opid%extkn,out%extkn(:,1),start=(/1/),count=(/mp/))
+          IF(status/=NF90_NOERR) CALL nc_abort('Error writing extkn parameter to file ' &
+               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
+!          status=NF90_PUT_VAR(ncid_out,opid%rootbeta,out%rootbeta(:,1),start=(/1/),count=(/mp/))
+!          IF(status/=NF90_NOERR) CALL nc_abort('Error writing rootbeta parameter to file ' &
+!               //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
           status=NF90_PUT_VAR(ncid_out,opid%tminvj,out%tminvj(:,1),start=(/1/),count=(/mp/))
           IF(status/=NF90_NOERR) CALL nc_abort('Error writing tminvj parameter to file ' &
                //TRIM(filename_out)// '(SUBROUTINE open_output_file)')
@@ -2967,7 +3214,9 @@ CONTAINS
        DEALLOCATE(out%bch,out%clay,out%sand,out%silt,out%css,out%rhosoil, &
             out%hyds,out%rs20,out%ssat,out%sfc,out%swilt,out%sucs,out%froot,out%zse, &
             out%canst1,out%dleaf,out%ejmax,out%vcmax,out%frac4,out%hc,out%rp20, &
-            out%rpcoef,out%shelrb,out%xfang,out%albsoil,out%tminvj,out%tmaxvj, &
+            out%rpcoef,out%shelrb,out%xfang, &
+            out%wai,out%vegcf,out%extkn, & ! out%rootbeta, &
+            out%albsoil,out%tminvj,out%tmaxvj, &
             out%vbeta,out%ratecp,out%ratecs,out%meth,out%za)
     END IF
        
@@ -3054,13 +3303,13 @@ CONTAINS
     IF(output%met.OR.output%Snowf) THEN
        IF(gridType=='mask') THEN ! if land sea mask type grid
           DO i = 1, mp
-             out%Snowf(land_x(i),land_y(i),1) = met%precips(i)/dels
+             out%Snowf(land_x(i),land_y(i),1) = met%precip_s(i)/dels
           END DO
           WHERE(mask/=1) out%Snowf(:,:,1) = -0.01 ! not land
           status=NF90_PUT_VAR(ncid_out,ovid%Snowf,out%Snowf,start=(/1,1,ktau/), &
                count=(/xdimsize,ydimsize,1/)) ! write to file
        ELSE IF(gridType=='land') THEN ! else if land only grid
-          out%Snowf(:,1,1) = met%precips/dels
+          out%Snowf(:,1,1) = met%precip_s/dels
           status=NF90_PUT_VAR(ncid_out,ovid%Snowf,out%Snowf(:,:,1), &
                start=(/1,ktau/),count=(/mp,1/))
        END IF
@@ -4172,7 +4421,12 @@ CONTAINS
        DEALLOCATE(out%isoil,out%iveg)
     END IF
     DEALLOCATE(mask,timevar,land_x,land_y)
-    DEALLOCATE(latitude,longitude,gdpt)
+! new variable for safe spinup (Gab, Oct 2007)
+    IF(ASSOCIATED(PrecipScale))DEALLOCATE(PrecipScale)
+! Bug found by Gab (Oct 2007) 
+!    DEALLOCATE(latitude,longitude,gdpt)
+    DEALLOCATE(latitude,longitude)
+    IF(ASSOCIATED(gdpt)) DEALLOCATE(gdpt)
 
     ! Deallocate CABLE main variables:
     CALL dealloc_cbm_var(air, mp)
@@ -4193,7 +4447,7 @@ CONTAINS
   END SUBROUTINE close_output_file
   !==========================================================================
   SUBROUTINE create_restart(filename_restart_out,filename_met,logn,kstart, &
-       kend,soil,veg,ssoil,canopy,rough,bgc,bal)
+       kend,soil,veg,ssoil,canopy,rough,bgc,bal,nvegt,nsoilt)
     ! Creates a restart file for CABLE using a land only grid of size mp
     ! and CABLE's internal variable names.
     CHARACTER(LEN=*), INTENT(IN) :: filename_met 
@@ -4208,6 +4462,8 @@ CONTAINS
     TYPE (canopy_type),INTENT(IN)         :: canopy ! vegetation variables
     TYPE (roughness_type),INTENT(IN)      :: rough  ! roughness varibles
     TYPE (balances_type),INTENT(IN)  :: bal  ! energy and water balance variables
+    INTEGER, INTENT(IN) :: nvegt
+    INTEGER, INTENT(IN) :: nsoilt
     TYPE(parID_type) :: rpid ! parameter IDs for restart nc file
     INTEGER :: ncid_restart ! netcdf restart file ID
     CHARACTER(LEN=10) :: todaydate, nowtime ! used to timestamp netcdf file
@@ -4709,7 +4965,20 @@ CONTAINS
          '(SUBROUTINE create_restart)')
     !---------------------MODEL PARAMETERS---------------------------------   
     WRITE(logn,*) 'Writing model parameters to restart file'
-    ! Allocate size of output parameter variables:
+    ! nvegt (Number of vegetation types):
+    status=NF90_DEF_VAR(ncid_restart,'nvegt',NF90_INT,rpid%nvegt)
+    IF (status /= NF90_NOERR) CALL nc_abort &
+         ('Error defining nvegt variable in restart file. '// &
+         '(SUBROUTINE create_restart)')
+    status = NF90_PUT_ATT(ncid_restart,rpid%nvegt,"long_name",&
+         "Number of vegetation types")
+    ! nsoilt (Number of soil types):
+    status=NF90_DEF_VAR(ncid_restart,'nsoilt',NF90_INT,rpid%nsoilt)
+    IF (status /= NF90_NOERR) CALL nc_abort &
+         ('Error defining nsoilt variable in restart file. '// &
+         '(SUBROUTINE create_restart)')
+    status = NF90_PUT_ATT(ncid_restart,rpid%nsoilt,"long_name",&
+         "Number of soil types")
     ! iveg (Vegetation type):
     status=NF90_DEF_VAR(ncid_restart,'iveg',NF90_FLOAT,(/mpID/), &
          rpid%iveg)
@@ -4952,6 +5221,43 @@ CONTAINS
     status = NF90_PUT_ATT(ncid_restart,rpid%xfang,"long_name",&
          "Leaf angle parameter")
     status = NF90_PUT_ATT(ncid_restart,rpid%xfang,"units","-")
+    ! wai (wood area index):
+    status=NF90_DEF_VAR(ncid_restart,'wai',NF90_FLOAT,(/mpID/), &
+         rpid%wai)
+    IF (status /= NF90_NOERR) CALL nc_abort &
+         ('Error defining wai variable in restart file. '// &
+         '(SUBROUTINE create_restart)')
+    status = NF90_PUT_ATT(ncid_restart,rpid%wai,"long_name",&
+         "wood area index")
+    status = NF90_PUT_ATT(ncid_restart,rpid%wai,"units","-")
+    ! vegcf :
+    status=NF90_DEF_VAR(ncid_restart,'vegcf',NF90_FLOAT,(/mpID/), &
+         rpid%vegcf)
+    IF (status /= NF90_NOERR) CALL nc_abort &
+         ('Error defining vegcf variable in restart file. '// &
+         '(SUBROUTINE create_restart)')
+    status = NF90_PUT_ATT(ncid_restart,rpid%vegcf,"long_name",&
+         "vegcf")
+    status = NF90_PUT_ATT(ncid_restart,rpid%vegcf,"units","-")
+    ! extkn (extinction coef for vertical profile):
+    status=NF90_DEF_VAR(ncid_restart,'extkn',NF90_FLOAT,(/mpID/), &
+         rpid%extkn)
+    IF (status /= NF90_NOERR) CALL nc_abort &
+         ('Error defining extkn variable in restart file. '// &
+         '(SUBROUTINE create_restart)')
+    status = NF90_PUT_ATT(ncid_restart,rpid%extkn,"long_name",&
+         "extinction coef for vertical profile")
+    status = NF90_PUT_ATT(ncid_restart,rpid%extkn,"units","-")
+!    ! rootbeta :
+!    status=NF90_DEF_VAR(ncid_restart,'rootbeta',NF90_FLOAT,(/mpID/), &
+!         rpid%rootbeta)
+!    IF (status /= NF90_NOERR) CALL nc_abort &
+!         ('Error defining rootbeta variable in restart file. '// &
+!         '(SUBROUTINE create_restart)')
+!    status = NF90_PUT_ATT(ncid_restart,rpid%rootbeta,"long_name",&
+!         "rootbeta")
+!    status = NF90_PUT_ATT(ncid_restart,rpid%rootbeta,"units","-")
+
     ! tminvj (Min temperature for the start of photosynthesis):
     status=NF90_DEF_VAR(ncid_restart,'tminvj',NF90_FLOAT,(/mpID/), &
          rpid%tminvj)
@@ -5052,6 +5358,12 @@ CONTAINS
          //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
 
     ! Write parameters to netcdf file:
+    status=NF90_PUT_VAR(ncid_restart,rpid%nvegt,nvegt)
+    IF(status/=NF90_NOERR) CALL nc_abort('Error writing nvegt parameter to file ' &
+         //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
+    status=NF90_PUT_VAR(ncid_restart,rpid%nsoilt,nsoilt)
+    IF(status/=NF90_NOERR) CALL nc_abort('Error writing nsoilt parameter to file ' &
+         //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
     status=NF90_PUT_VAR(ncid_restart,rpid%iveg,veg%iveg)        
     IF(status/=NF90_NOERR) CALL nc_abort('Error writing iveg parameter to file ' &
          //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
@@ -5133,6 +5445,19 @@ CONTAINS
     status=NF90_PUT_VAR(ncid_restart,rpid%xfang,veg%xfang)          
     IF(status/=NF90_NOERR) CALL nc_abort('Error writing xfang parameter to file ' &
          //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
+    status=NF90_PUT_VAR(ncid_restart,rpid%wai,veg%wai)
+    IF(status/=NF90_NOERR) CALL nc_abort('Error writing wai parameter to file ' &
+         //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
+    status=NF90_PUT_VAR(ncid_restart,rpid%vegcf,veg%vegcf)
+    IF(status/=NF90_NOERR) CALL nc_abort('Error writing vegcf parameter to file ' &
+         //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
+    status=NF90_PUT_VAR(ncid_restart,rpid%extkn,veg%extkn)
+    IF(status/=NF90_NOERR) CALL nc_abort('Error writing extkn parameter to file ' &
+         //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
+!    status=NF90_PUT_VAR(ncid_restart,rpid%rootbeta,veg%rootbeta)
+!    IF(status/=NF90_NOERR) CALL nc_abort('Error writing rootbeta parameter to file ' &
+!         //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')
+
     status=NF90_PUT_VAR(ncid_restart,rpid%tminvj,veg%tminvj)          
     IF(status/=NF90_NOERR) CALL nc_abort('Error writing tminvj parameter to file ' &
          //TRIM(filename_restart_out)// '(SUBROUTINE create_restart)')

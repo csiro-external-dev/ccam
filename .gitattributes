@@ -1,5 +1,7 @@
 * text=auto !eol
 /Makefile -text
+/READMEv1.4 -text
+/cable.nml -text
 /cable_carbon.f90 -text
 /cable_cbm.f90 -text
 /cable_checks.f90 -text
@@ -11,6 +13,7 @@
 /cable_parameters.f90 -text
 /cable_soilsnow.f90 -text
 /cable_variables.f90 -text
-surface_data/fort.22 -text
-surface_data/lai48.nc -text
-surface_data/veg_parm.txt -text
+surface_data/LAI_Monthly_Global.nc -text
+surface_data/VegSoil_Type_Global_igbp.csv -text
+surface_data/def_soil_params.txt -text
+surface_data/def_veg_params_igbp.txt -text
