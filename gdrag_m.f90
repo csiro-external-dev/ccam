@@ -32,17 +32,31 @@ real, dimension(:), allocatable, save :: he
 integer, save :: kbot
 !$acc declare create(kbot)
 
+type :: tiled
+  real, allocatable, dimension(:,:) :: t, u, v
+end type
+type(tiled), allocatable, dimension(:) :: tvar
+
 contains
 
 subroutine gdrag_init(ifull)
 
 use cc_omp
+use newmpar_m, only : kl
 
 implicit none
 
 integer, intent(in) :: ifull
+integer :: tile
 
 allocate(he(ifull),helo(ifull))
+
+allocate(tvar(ntiles))
+do tile = 1,ntiles
+  allocate(tvar(tile)%t(imax,kl))
+  allocate(tvar(tile)%u(imax,kl))
+  allocate(tvar(tile)%v(imax,kl))
+end do
 
 return
 end subroutine gdrag_init
@@ -73,9 +87,20 @@ end subroutine gdrag_sbl
 
 subroutine gdrag_end
 
+use cc_omp
+
 implicit none
 
+integer :: tile
+
 deallocate(he,helo)
+
+do tile = 1,ntiles
+  deallocate(tvar(tile)%t)
+  deallocate(tvar(tile)%u)
+  deallocate(tvar(tile)%v)
+end do
+deallocate(tvar)
 
 return
 end subroutine gdrag_end
@@ -97,28 +122,44 @@ integer idjd_t
 real, dimension(imax,kl) :: lt, lu, lv
 logical mydiag_t
 
-!$omp do schedule(static) private(is,ie),        &
-!$omp private(lt,lu,lv,idjd_t,mydiag_t)
-!$acc parallel copy(u,v), copyin(t,tss,he)
-!$acc loop gang private(lt,lu,lv)
+!copy to the tiled derived type
+!$omp do schedule(static) private(is,ie)
 do tile = 1,ntiles
   is = (tile-1)*imax + 1
   ie = tile*imax
-  
+
+  tvar(tile)%t = t(is:ie,:)
+  tvar(tile)%u = u(is:ie,:)
+  tvar(tile)%v = v(is:ie,:)
+end do
+!$omp end do nowait
+
+!$omp do schedule(static) private(is,ie),        &
+!$omp private(idjd_t,mydiag_t)
+!$acc parallel copyin(tss,he)
+!$acc loop gang
+do tile = 1,ntiles
+  is = (tile-1)*imax + 1
+  ie = tile*imax
+
   idjd_t = mod(idjd-1,imax) + 1
   mydiag_t = ((idjd-1)/imax==tile-1).and.mydiag
-  
-  lt = t(is:ie,:)
-  lu = u(is:ie,:)
-  lv = v(is:ie,:)
-  
-  call gwdrag_work(lt,lu,lv,tss(is:ie),he(is:ie),idjd_t,mydiag_t)
 
-  u(is:ie,:) = lu
-  v(is:ie,:) = lv
- 
+  call gwdrag_work(tvar(tile)%t,tvar(tile)%u,tvar(tile)%v,tss(is:ie),he(is:ie),idjd_t,mydiag_t)
+
 end do
 !$acc end parallel
+!$omp end do nowait
+
+!copy from the tiled derived type
+!$omp do schedule(static) private(is,ie)
+do tile = 1,ntiles
+  is = (tile-1)*imax + 1
+  ie = tile*imax
+
+  u(is:ie,:) = tvar(tile)%u
+  v(is:ie,:) = tvar(tile)%v
+end do
 !$omp end do nowait
 
 return
