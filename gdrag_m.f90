@@ -124,19 +124,23 @@ logical mydiag_t
 
 !copy to the tiled derived type
 !$omp do schedule(static) private(is,ie)
+!$acc enter data copyin(tvar(1:ntiles))
 do tile = 1,ntiles
   is = (tile-1)*imax + 1
   ie = tile*imax
 
   tvar(tile)%t = t(is:ie,:)
+!$acc enter data copyin(tvar(tile)%t)
   tvar(tile)%u = u(is:ie,:)
+!$acc enter data copyin(tvar(tile)%u)
   tvar(tile)%v = v(is:ie,:)
+!$acc enter data copyin(tvar(tile)%v)
 end do
 !$omp end do nowait
 
 !$omp do schedule(static) private(is,ie),        &
 !$omp private(idjd_t,mydiag_t)
-!$acc parallel copyin(tss,he)
+!$acc parallel copyin(tss,he) default(present)
 !$acc loop gang
 do tile = 1,ntiles
   is = (tile-1)*imax + 1
@@ -157,10 +161,14 @@ do tile = 1,ntiles
   is = (tile-1)*imax + 1
   ie = tile*imax
 
+!$acc exit data copyout(tvar(tile)%t)
+!$acc exit data copyout(tvar(tile)%u)
   u(is:ie,:) = tvar(tile)%u
+!$acc exit data copyout(tvar(tile)%v)
   v(is:ie,:) = tvar(tile)%v
 end do
 !$omp end do nowait
+!$acc exit data copyout(tvar(1:tile))
 
 return
 end subroutine gwdrag
