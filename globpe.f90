@@ -51,7 +51,7 @@ use epst_m                                 ! Off-centre terms
 use estab                                  ! Liquid saturation function
 use extraout_m                             ! Additional diagnostics
 use filnames_m                             ! Filenames
-use gdrag_m, only : gwdrag                 ! Gravity wave drag
+use gdrag_m, only : gwdrag, gdrag_end      ! Gravity wave drag
 use histave_m                              ! Time average arrays
 use hs_phys_m                              ! Held & Suarez
 use indata                                 ! Data initialisation
@@ -1057,6 +1057,7 @@ nullify(x_g, y_g, z_g)
 
   
 !****************************************************************
+call gdrag_end
 
 ! finalize MPI comms
 call ccmpi_finalize

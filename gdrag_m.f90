@@ -58,6 +58,13 @@ do tile = 1,ntiles
   allocate(tvar(tile)%v(imax,kl))
 end do
 
+!$acc enter data create(tvar(1:ntiles))
+do tile = 1,ntiles
+!$acc enter data create(tvar(tile)%t)
+!$acc enter data create(tvar(tile)%u)
+!$acc enter data create(tvar(tile)%v)
+end do
+
 return
 end subroutine gdrag_init
 
@@ -96,6 +103,13 @@ integer :: tile
 deallocate(he,helo)
 
 do tile = 1,ntiles
+!$acc exit data delete(tvar(tile)%t)
+!$acc exit data delete(tvar(tile)%u)
+!$acc exit data delete(tvar(tile)%v)
+end do
+!$acc exit data delete(tvar(1:ntiles))
+
+do tile = 1,ntiles
   deallocate(tvar(tile)%t)
   deallocate(tvar(tile)%u)
   deallocate(tvar(tile)%v)
@@ -124,17 +138,16 @@ logical mydiag_t
 
 !copy to the tiled derived type
 !$omp do schedule(static) private(is,ie)
-!$acc enter data copyin(tvar(1:ntiles))
 do tile = 1,ntiles
   is = (tile-1)*imax + 1
   ie = tile*imax
 
   tvar(tile)%t = t(is:ie,:)
-!$acc enter data copyin(tvar(tile)%t)
+!$acc update device(tvar(tile)%t)
   tvar(tile)%u = u(is:ie,:)
-!$acc enter data copyin(tvar(tile)%u)
+!$acc update device(tvar(tile)%u)
   tvar(tile)%v = v(is:ie,:)
-!$acc enter data copyin(tvar(tile)%v)
+!$acc update device(tvar(tile)%v)
 end do
 !$omp end do nowait
 
@@ -161,14 +174,12 @@ do tile = 1,ntiles
   is = (tile-1)*imax + 1
   ie = tile*imax
 
-!$acc exit data copyout(tvar(tile)%t)
-!$acc exit data copyout(tvar(tile)%u)
+!$acc update self(tvar(tile)%u)
   u(is:ie,:) = tvar(tile)%u
-!$acc exit data copyout(tvar(tile)%v)
+!$acc update self(tvar(tile)%v)
   v(is:ie,:) = tvar(tile)%v
 end do
 !$omp end do nowait
-!$acc exit data copyout(tvar(1:tile))
 
 return
 end subroutine gwdrag
